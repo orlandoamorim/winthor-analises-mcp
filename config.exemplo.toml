@@ -1,0 +1,152 @@
+# Configuração do winthor-analises-mcp
+# Copie para config.toml e ajuste. Nada aqui é senha: credenciais ficam em
+# variáveis de ambiente ou num arquivo .env (veja .env.exemplo), com os mesmos
+# nomes do winthor-mcp da VanguardIA: WINTHOR_DB_HOST, WINTHOR_DB_PORT,
+# WINTHOR_DB_SERVICE, WINTHOR_DB_USER, WINTHOR_DB_PASSWORD, WINTHOR_DB_SCHEMA.
+#
+# ATENÇÃO: os nomes de tabelas/colunas abaixo são o palpite inicial baseado no
+# padrão do WinThor (PCMOV, PCPRODUT, PCEST...). Ainda NÃO foram conferidos no
+# seu banco. Antes de usar em modo "oracle", rode:
+#     python -m winthor_analises.verificar_esquema
+# que confere cada tabela/coluna no dicionário do Oracle (só leitura).
+
+[geral]
+# "exemplo" = dados fictícios gerados localmente, sem conexão
+# "oracle"  = banco real do WinThor (somente leitura)
+modo = "exemplo"
+# Código da filial (CODFILIAL). Vazio = todas as filiais.
+filial = ""
+# Fuso usado para a regra de horário das consultas pesadas.
+fuso = "America/Sao_Paulo"
+# Consultas pesadas só fora do horário comercial: entre hora_fim_comercial e
+# hora_inicio_comercial (ex.: das 18h às 7h). Só vale no modo "oracle".
+hora_inicio_comercial = 7
+hora_fim_comercial = 18
+# Quantos dias de movimento (somando todos os períodos comparados) uma
+# consulta pode varrer no horário comercial. Acima disso ela é considerada
+# pesada e fica para depois das 18h. Ex.: 1 mês x 5 anos = ~180 dias (ok);
+# 1 ano inteiro x 2 anos = ~730 dias (só depois das 18h).
+dias_max_horario_comercial = 400
+# Limite de segurança de linhas devolvidas por consulta.
+limite_linhas = 200
+
+[oracle]
+# Em qual banco as variáveis WINTHOR_DB_* apontam: "replica" ou "producao".
+# O TI confirmou que existe réplica: use sempre ela (WINTHOR_DB_HOST/SERVICE da
+# réplica), para nenhuma consulta pesar no WinThor em uso.
+banco = "replica"
+# A regra "consultas pesadas só depois das 18h" vale também na réplica?
+# Deixe true até o TI confirmar que a réplica aguenta consulta pesada de dia.
+horario_vale_na_replica = true
+# Esquema dono das tabelas do WinThor (ex.: "WINTHOR"). Vazio = sem prefixo.
+# A variável WINTHOR_DB_SCHEMA, se definida, tem prioridade.
+esquema = ""
+# Tempo máximo de cada consulta, em segundos.
+timeout_segundos = 120
+# Recusa iniciar se o usuário do banco tiver privilégio de escrita
+# (INSERT/UPDATE/DELETE) ou for o próprio dono do esquema.
+exigir_usuario_somente_leitura = true
+
+# ---------------------------------------------------------------------------
+# Mapeamento de tabelas. Cada valor de coluna é um nome de coluna ou uma
+# expressão simples (ex.: "QT * PUNIT"). "filtro" é um trecho de WHERE.
+# Deixe "" quando a coluna não existir.
+# ---------------------------------------------------------------------------
+
+[tabelas.produtos]          # cadastro de produtos
+tabela = "PCPRODUT"
+codigo = "CODPROD"
+descricao = "DESCRICAO"
+fornecedor = "CODFORNEC"
+
+[tabelas.fornecedores]      # cadastro de fornecedores (rotina 202)
+tabela = "PCFORNEC"
+codigo = "CODFORNEC"
+nome = "FORNECEDOR"
+
+[tabelas.vendas]            # saídas de mercadoria por produto
+tabela = "PCMOV"
+data = "DTMOV"
+produto = "CODPROD"
+fornecedor = ""             # vazio = usa o fornecedor do cadastro do produto
+filial = "CODFILIAL"
+quantidade = "QT"
+valor = "QT * PUNIT"
+filtro = "CODOPER = 'S' AND DTCANCEL IS NULL"
+
+[tabelas.compras]           # entradas de mercadoria (rotina 218)
+tabela = "PCMOV"
+data = "DTMOV"
+produto = "CODPROD"
+fornecedor = "CODFORNEC"
+filial = "CODFILIAL"
+quantidade = "QT"
+valor = "QT * PUNIT"
+filtro = "CODOPER = 'E' AND DTCANCEL IS NULL"
+
+[tabelas.faturamento]       # notas fiscais de saída (total faturado)
+tabela = "PCNFSAID"
+data = "DTSAIDA"
+filial = "CODFILIAL"
+valor = "VLTOTAL"
+filtro = "DTCANCEL IS NULL"
+
+[tabelas.estoque]           # estoque atual por produto/filial
+tabela = "PCEST"
+produto = "CODPROD"
+filial = "CODFILIAL"
+quantidade = "QTESTGER - NVL(QTRESERV, 0) - NVL(QTBLOQUEADA, 0)"
+avaria = "QTINDENIZ"        # quantidade hoje na avaria (palpite; confirme com --descobrir AVARIA)
+custo = "CUSTOULTENT"       # custo unitário, para dizer quanto dinheiro está parado
+filtro = ""
+
+[tabelas.movimentos_avaria] # transferências entre estoque disponível e avaria
+# PALPITE TOTAL: cada empresa pode usar uma rotina/operação diferente para
+# mandar mercadoria para a avaria e trazer de volta. Descubra com o TI ou com
+#   python -m winthor_analises.verificar_esquema --descobrir AVARI
+# e ajuste os dois filtros (o que é ida para a avaria e o que é volta).
+tabela = "PCMOV"
+data = "DTMOV"
+produto = "CODPROD"
+quantidade = "QT"
+filial = "CODFILIAL"
+filtro_entrada = "CODOPER = 'SA' AND DTCANCEL IS NULL"
+filtro_retorno = "CODOPER = 'EA' AND DTCANCEL IS NULL"
+
+# Verbas: como a TOTVS descreve (rotina 1809 "Relação de verbas por fornecedor"),
+# a verba nasce como DÉBITO do fornecedor e vai sendo baixada por CRÉDITOS:
+#   gera:  pedido de compra com % bonificação (209), devolução ao fornecedor
+#          com acerto "Verba" (1302), acordo comercial
+#   baixa: entrada bonificada tipo 5 (1301) = mercadoria
+#          1803 = dinheiro | 1804 = desconto financeiro | 1806 = rebaixa de custo
+#   saldo = débito - crédito
+# Os nomes abaixo são palpite: os documentos da TOTVS não citam tabelas.
+# Para achar as tabelas reais:  python -m winthor_analises.verificar_esquema --descobrir VERBA
+
+[tabelas.verbas]            # uma linha por verba
+tabela = "PCVERBA"
+numero = "NUMVERBA"
+fornecedor = "CODFORNEC"
+data = "DTEMISSAO"
+vencimento = "DTVENC"
+valor = "VALOR"             # valor gerado (débito)
+forma = "FORMAPGTO"         # forma de recebimento: mercadoria, dinheiro... (veja [formas_verba])
+origem = ""                 # ex.: rotina ou tipo que gerou a verba (pedido, devolução, acordo)
+descricao = "HISTORICO"
+filtro = ""
+
+[tabelas.movimentos_verba]  # débitos e créditos de cada verba
+tabela = "PCMOVCRFOR"
+numero_verba = "NUMVERBA"
+valor = "VALOR"
+natureza = "TIPO"           # coluna que diz se é débito ou crédito ("" = todo movimento é baixa)
+credito = "C"               # valor de 'natureza' que indica crédito (baixa)
+rotina = "CODROTINA"        # rotina que lançou (1301, 1803, 1804, 1806...); "" se não houver
+data = "DTLANC"
+filtro = ""
+
+[formas_verba]              # tradução dos códigos da coluna 'forma' (ajuste ao que existir)
+M = "mercadoria"
+D = "dinheiro"
+F = "desconto financeiro"
+R = "rebaixa de custo"

@@ -1,0 +1,27 @@
+[project]
+name = "winthor-analises-mcp"
+version = "0.1.0"
+description = "MCP somente leitura sobre o WinThor (Oracle) para análises de vendas, compras, estoque e verbas"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "mcp>=1.2",
+    "oracledb>=2.0",
+]
+
+[project.optional-dependencies]
+teste = ["pytest>=8"]
+
+[project.scripts]
+winthor-analises-mcp = "winthor_analises.servidor:main"
+winthor-analises-verificar = "winthor_analises.verificar_esquema:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["winthor_analises"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
