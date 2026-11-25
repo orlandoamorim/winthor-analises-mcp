@@ -97,7 +97,14 @@ produto = "CODPROD"
 filial = "CODFILIAL"
 quantidade = "QTESTGER - NVL(QTRESERV, 0) - NVL(QTBLOQUEADA, 0)"
 avaria = "QTINDENIZ"        # quantidade hoje na avaria (palpite; confirme com --descobrir AVARIA)
-custo = "CUSTOULTENT"       # custo unitário, para dizer quanto dinheiro está parado
+# Valor unitário para dizer quanto dinheiro está parado na avaria. VALORULTENT
+# (valor da última entrada) é o que a rotina 8073 usa: QTINDENIZ x VALORULTENT,
+# conferido por outra distribuidora contra a tela da 8073.
+custo = "VALORULTENT"
+# O que já foi pedido ao fornecedor e ainda não chegou (pedidos da rotina 220).
+# PCEST.QTPEDIDA aparece na documentação da TOTVS (sugestão de compra). Entra na
+# cobertura da sazonalidade. Deixe "" para olhar só o estoque físico.
+pedido = "QTPEDIDA"
 filtro = ""
 
 [tabelas.movimentos_avaria] # transferências entre estoque disponível e avaria
@@ -135,7 +142,23 @@ origem = ""                 # ex.: rotina ou tipo que gerou a verba (pedido, dev
 descricao = "HISTORICO"
 filtro = ""
 
+[tabelas.aplicacoes_verba]  # quanto de cada verba já foi aplicado (opcional)
+# Critério da rotina 1809 ("saldo a aplicar"): saldo = PCVERBA.VALOR - soma de
+# PCAPLICVERBA.VLAPLIC. Estornos entram como linha negativa, então a soma já é o
+# líquido. Outra distribuidora conferiu essa conta contra a 1809 ao centavo.
+# Com esta seção, o "recebido" de cada verba vem daqui; [tabelas.movimentos_verba]
+# continua dando a quebra por rotina e as datas das rebaixas de custo (1806).
+# Atenção: nessa conferência as verbas canceladas entravam no cálculo da 1809;
+# compare com e sem um filtro de cancelamento em [tabelas.verbas].
+tabela = "PCAPLICVERBA"
+numero_verba = "NUMVERBA"
+valor = "VLAPLIC"
+filtro = ""
+
 [tabelas.movimentos_verba]  # débitos e créditos de cada verba
+# PCMOVCRFOR é a conta corrente do fornecedor: débitos (D) - créditos (C) dá o
+# saldo da rotina 1825. Lá, todos os códigos de um grupo usam a conta do
+# fornecedor principal (PCFORNEC.CODFORNECPRINC).
 tabela = "PCMOVCRFOR"
 numero_verba = "NUMVERBA"
 valor = "VALOR"

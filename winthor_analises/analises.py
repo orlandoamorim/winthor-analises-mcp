@@ -163,10 +163,14 @@ def sazonalidade(fonte, cfg, data_comemorativa_: str, anos: int = 3, dias_antes:
         ajuste = 1 + max(-0.3, min(0.3, (tendencia or 0) / 100))
         previsao = por_ano[janelas[0]["ano"]] * ajuste
         estoque = _r(est.get(k, {}).get("quantidade"))
-        cobertura = round(estoque / previsao * 100) if previsao else None
-        if previsao and estoque < 0.5 * previsao:
+        pedido = est.get(k, {}).get("pedido")
+        pedido = _r(pedido) if pedido is not None else None
+        # o que já foi pedido ao fornecedor e ainda não chegou também cobre a data
+        total = estoque + (pedido or 0)
+        cobertura = round(total / previsao * 100) if previsao else None
+        if previsao and total < 0.5 * previsao:
             situacao = "risco de ruptura"
-        elif previsao and estoque < previsao:
+        elif previsao and total < previsao:
             situacao = "atenção"
         else:
             situacao = "ok"
@@ -178,8 +182,9 @@ def sazonalidade(fonte, cfg, data_comemorativa_: str, anos: int = 3, dias_antes:
             "tendencia_pct": tendencia,
             "previsao_para_a_data": _r(previsao),
             "estoque_atual": estoque,
+            "pedido_em_aberto": pedido,
             "cobertura_pct": cobertura,
-            "falta_comprar_aprox": _r(max(0.0, previsao - estoque)),
+            "falta_comprar_aprox": _r(max(0.0, previsao - total)),
             "situacao": situacao,
         })
     ordem = {"risco de ruptura": 0, "atenção": 1, "ok": 2}
@@ -195,7 +200,9 @@ def sazonalidade(fonte, cfg, data_comemorativa_: str, anos: int = 3, dias_antes:
         "observacoes": [
             "Quantidades em unidades de venda. A previsão é o ano passado ajustado pela "
             "tendência entre os dois últimos anos (limitada a ±30%).",
-            "O estoque é o de hoje: não conta pedidos de compra ainda não recebidos.",
+            ("O estoque é o de hoje. A cobertura soma o que já foi pedido ao fornecedor e ainda não chegou."
+             if cfg.col("estoque", "pedido") else
+             "O estoque é o de hoje: não conta pedidos de compra ainda não recebidos."),
         ],
     }
 
@@ -252,7 +259,9 @@ def verbas_fornecedor(fonte, cfg, fornecedor: str | int | None = None, somente_c
         baixas = {ROTINAS_BAIXA.get(str(k), f"rotina {k}"): _r(v)
                   for k, v in (l.get("baixas_por_rotina") or {}).items() if v}
         gerado = _r(l["valor"])
-        recebido = _r(sum(baixas.values()))
+        # com [tabelas.aplicacoes_verba] o recebido vem do aplicado (critério da 1809);
+        # sem ela, da soma das baixas por rotina
+        recebido = _r(l["aplicado"]) if l.get("aplicado") is not None else _r(sum(baixas.values()))
         saldo = _r(gerado - recebido)
         venc = _como_data(l.get("vencimento"))
         forma = _forma(cfg, l.get("forma"))

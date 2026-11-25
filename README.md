@@ -106,9 +106,11 @@ Usa o driver `oracledb` em modo *thin*: não precisa instalar o Oracle Client.
 | `faturamento` | `PCNFSAID.VLTOTAL` | Filtrar espécie/tipo de venda? |
 | `estoque` | `PCEST` (`QTESTGER - QTRESERV - QTBLOQUEADA`) | Confirmar fórmula de estoque disponível |
 | `verbas` | `PCVERBA` | Colunas de valor, emissão, vencimento e forma de pagamento; códigos da forma (`[formas_verba]`) |
-| `estoque.avaria` / `custo` | `PCEST.QTINDENIZ` / `CUSTOULTENT` | Qual coluna guarda a avaria e qual custo usar |
+| `estoque.avaria` / `custo` | `PCEST.QTINDENIZ` / `VALORULTENT` | Mesma conta da rotina 8073 (avaria × valor da última entrada), conferida por outra distribuidora |
+| `estoque.pedido` | `PCEST.QTPEDIDA` | Citada pela TOTVS como o que já foi pedido ao fornecedor; entra na cobertura da sazonalidade |
 | `movimentos_avaria` | `PCMOV` com `CODOPER` `SA`/`EA` | **Palpite total.** Qual rotina/operação a empresa usa para mandar para a avaria e trazer de volta |
-| `movimentos_verba` | `PCMOVCRFOR` | Onde ficam os créditos (baixas) de cada verba, a coluna que separa débito de crédito e a rotina que lançou |
+| `aplicacoes_verba` | `PCAPLICVERBA` (`VLAPLIC`) | Saldo da 1809 = `PCVERBA.VALOR` − soma de `VLAPLIC`; conferido por outra distribuidora. Seção opcional |
+| `movimentos_verba` | `PCMOVCRFOR` | Conta corrente do fornecedor (saldo da 1825). Aqui serve para a quebra por rotina e as datas da 1806: coluna de débito/crédito, rotina e data ainda são palpite |
 
 ## Como as verbas são calculadas
 
@@ -126,8 +128,9 @@ de verbas por fornecedor":
 - Verba de devolução não tem valor a aplicar em rebaixa de custo; é recebida em
   dinheiro ou desconto.
 
-Os documentos da TOTVS **não citam nomes de tabelas**, por isso `PCVERBA` e
-`PCMOVCRFOR` continuam sendo palpite até rodar o `--descobrir VERBA` no banco.
+Os documentos da TOTVS **não citam nomes de tabelas**. `PCVERBA` e
+`PCAPLICVERBA` foram conferidas contra a 1809 por outra distribuidora que usa
+WinThor, mas ainda falta confirmar no seu banco com o `--descobrir VERBA`.
 Vale conferir o resultado com a 1809 de um fornecedor conhecido.
 
 ## Como o alerta de avaria funciona
@@ -208,7 +211,6 @@ tests/                  testes (inclui um Oracle falso)
 - Ferramenta de **ruptura** (pergunta 4): produtos com estoque abaixo do giro
   médio. O WTA tem o serviço `winthor-compras-girodia` (cálculo de giro dia para
   compras); vale ver se dá para usar o mesmo número que o WinThor usa.
-- Incluir pedidos de compra em aberto (rotina 220) no cálculo de cobertura.
 
 ## Licença
 

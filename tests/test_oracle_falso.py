@@ -91,8 +91,28 @@ def test_verbas_junta_baixas_por_rotina():
           "VALOR": 100, "FORMA": "M", "ORIGEM": None, "DESCRICAO": None}],
         [{"NUMERO": 7, "ROTINA": 1301, "CREDITOS": 30, "DEBITOS": 0},
          {"NUMERO": 7, "ROTINA": 1806, "CREDITOS": 20, "DEBITOS": 0}],
+        [{"NUMERO": 7, "APLICADO": 45}],
     ]
     f = FonteOracle(replace(carregar(), modo="oracle"), conexao=con)
     v = f.verbas(101)
     assert v[0]["baixas_por_rotina"] == {"1301": 30.0, "1806": 20.0}
-    assert con.log.count("SET TRANSACTION READ ONLY") == 2 and con.log.count("ROLLBACK") == 2
+    assert v[0]["aplicado"] == 45.0
+    assert con.log.count("SET TRANSACTION READ ONLY") == 3 and con.log.count("ROLLBACK") == 3
+
+
+def test_sql_aplicacoes_verba_e_pedido_no_estoque():
+    cfg = replace(carregar(), modo="oracle", esquema="WINTHOR")
+    f = FonteOracle(cfg, conexao=ConexaoFalsa([]))
+    sql, binds = f.sql_aplicacoes_verba(101)
+    exigir_select(sql)
+    assert "SUM(VLAPLIC) AS aplicado FROM WINTHOR.PCAPLICVERBA" in sql and binds == {"forn": 101}
+    sql, _ = f.sql_estoque([1])
+    exigir_select(sql)
+    assert "QTPEDIDA AS pedido" in sql and "SUM(e.pedido) AS pedido" in sql
+
+
+def test_sem_aplicacoes_verba_nao_consulta():
+    cfg = replace(carregar(), modo="oracle")
+    tabelas = {k: v for k, v in cfg.tabelas.items() if k != "aplicacoes_verba"}
+    f = FonteOracle(replace(cfg, tabelas=tabelas), conexao=ConexaoFalsa([]))
+    assert f.sql_aplicacoes_verba(None) is None
