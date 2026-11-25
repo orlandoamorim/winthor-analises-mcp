@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: winthor-analises-mcp
+Version: 0.1.0
+Summary: MCP somente leitura sobre o WinThor (Oracle) para análises de vendas, compras, estoque e verbas
+License-Expression: MIT
+Requires-Python: >=3.11
+License-File: LICENSE
+Requires-Dist: mcp>=1.2
+Requires-Dist: oracledb>=2.0
+Provides-Extra: teste
+Requires-Dist: pytest>=8; extra == "teste"
+Dynamic: license-file

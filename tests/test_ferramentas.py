@@ -89,3 +89,24 @@ def test_avaria_sem_datas_de_verba_avisa():
             return None
     r = analises.avaria_parada(SemDatas(cfg, hoje=HOJE), cfg, hoje=HOJE)
     assert r["resumo"]["produtos_para_devolver"] == 0 and "Configure" in r["observacoes"][0]
+
+
+def test_verbas_usa_aplicado_quando_configurado():
+    class FonteAplicado:
+        def verbas(self, fornecedor=None):
+            return [{"numero": 1, "fornecedor": 101, "nome_fornecedor": "X", "data": None,
+                     "vencimento": None, "valor": 100.0, "forma": "M", "origem": None, "descricao": None,
+                     "baixas_por_rotina": {"1301": 90.0}, "aplicado": 40.0}]
+    r = analises.verbas_fornecedor(FonteAplicado(), cfg, fornecedor=101, hoje=HOJE)
+    v = r["verbas"][0]
+    assert (v["recebido"], v["saldo"], v["situacao"]) == (40.0, 60.0, "parcial")
+
+
+def test_sazonalidade_soma_pedido_em_aberto():
+    r = analises.sazonalidade(fonte, cfg, "natal", 3, 15, 30, hoje=HOJE)
+    com_pedido = [i for i in r["itens"] if i["pedido_em_aberto"]]
+    assert com_pedido
+    for i in com_pedido:
+        total = i["estoque_atual"] + i["pedido_em_aberto"]
+        assert i["cobertura_pct"] == round(total / i["previsao_para_a_data"] * 100)
+    assert any("pedido ao fornecedor" in o for o in r["observacoes"])

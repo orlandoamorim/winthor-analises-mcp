@@ -1,0 +1,3 @@
+[console_scripts]
+winthor-analises-mcp = winthor_analises.servidor:main
+winthor-analises-verificar = winthor_analises.verificar_esquema:main

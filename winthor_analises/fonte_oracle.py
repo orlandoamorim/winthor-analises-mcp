@@ -169,11 +169,12 @@ class FonteOracle:
                 nomes.append(f":k{i}")
             cond.append(f"{t['produto']} IN ({', '.join(nomes) or 'NULL'})")
         where = (" WHERE " + " AND ".join(cond)) if cond else ""
-        sql = (f"WITH e AS (SELECT {t['produto']} AS produto, {t['quantidade']} AS quantidade "
-               f"FROM {c.tabela('estoque')}{where}) "
+        pedido = t.get("pedido") or "NULL"
+        sql = (f"WITH e AS (SELECT {t['produto']} AS produto, {t['quantidade']} AS quantidade, "
+               f"{pedido} AS pedido FROM {c.tabela('estoque')}{where}) "
                f"SELECT e.produto AS produto, MAX(p.{p['descricao']}) AS descricao, "
                f"MAX(p.{p['fornecedor']}) AS fornecedor, MAX(fo.{fo['nome']}) AS nome_fornecedor, "
-               f"SUM(e.quantidade) AS quantidade "
+               f"SUM(e.quantidade) AS quantidade, SUM(e.pedido) AS pedido "
                f"FROM e LEFT JOIN {c.tabela('produtos')} p ON p.{p['codigo']} = e.produto "
                f"LEFT JOIN {c.tabela('fornecedores')} fo ON fo.{fo['codigo']} = p.{p['fornecedor']} "
                f"GROUP BY e.produto")
@@ -223,6 +224,25 @@ class FonteOracle:
         sql = (f"SELECT {m['numero_verba']} AS numero, {rotina} AS rotina, {cred} AS creditos, "
                f"{deb} AS debitos FROM {c.tabela('movimentos_verba')} WHERE "
                + " AND ".join(cond) + f" GROUP BY {grupo}")
+        return sql, binds
+
+    def sql_aplicacoes_verba(self, fornecedor: int | None) -> tuple[str, dict] | None:
+        """Quanto de cada verba já foi aplicado (critério da rotina 1809).
+
+        Estornos entram como valor negativo, então a soma já é o aplicado líquido.
+        """
+        c = self.cfg
+        if "aplicacoes_verba" not in c.tabelas:
+            return None
+        v, a = c.tabelas["verbas"], c.tabelas["aplicacoes_verba"]
+        binds: dict = {}
+        cond = [f"{a['numero_verba']} IN (SELECT {v['numero']} FROM {c.tabela('verbas')}"
+                f"{self._where_verbas(fornecedor, binds)})"]
+        if a.get("filtro"):
+            cond.append(f"({a['filtro']})")
+        sql = (f"SELECT {a['numero_verba']} AS numero, SUM({a['valor']}) AS aplicado "
+               f"FROM {c.tabela('aplicacoes_verba')} WHERE " + " AND ".join(cond)
+               + f" GROUP BY {a['numero_verba']}")
         return sql, binds
 
     def _lista_binds(self, valores, binds: dict, prefixo: str = "k") -> str:
@@ -295,7 +315,8 @@ class FonteOracle:
 
     def estoque(self, produtos=None) -> dict:
         sql, binds = self.sql_estoque(produtos)
-        return {r["produto"]: {**r, "quantidade": float(r["quantidade"] or 0)}
+        return {r["produto"]: {**r, "quantidade": float(r["quantidade"] or 0),
+                               "pedido": float(r["pedido"]) if r.get("pedido") is not None else None}
                 for r in self._consultar(sql, binds)}
 
     def verbas(self, fornecedor=None) -> list[dict]:
@@ -309,6 +330,11 @@ class FonteOracle:
             b[chave] = b.get(chave, 0.0) + float(r["creditos"] or 0)
         for vb in verbas:
             vb["baixas_por_rotina"] = baixas.get(vb["numero"], {})
+        montado = self.sql_aplicacoes_verba(fornecedor)
+        if montado is not None:
+            aplicado = {r["numero"]: float(r["aplicado"] or 0) for r in self._consultar(*montado)}
+            for vb in verbas:
+                vb["aplicado"] = aplicado.get(vb["numero"], 0.0)
         return verbas
 
     def estoque_avaria(self) -> dict:

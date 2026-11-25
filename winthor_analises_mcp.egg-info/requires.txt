@@ -1,0 +1,5 @@
+mcp>=1.2
+oracledb>=2.0
+
+[teste]
+pytest>=8

@@ -38,10 +38,15 @@ OPCIONAIS: dict[str, tuple[str, ...]] = {
     "vendas": ("fornecedor", "filial", "filtro"),
     "compras": ("fornecedor", "filial", "filtro"),
     "faturamento": ("filial", "filtro"),
-    "estoque": ("filial", "filtro", "avaria", "custo"),
+    "estoque": ("filial", "filtro", "avaria", "custo", "pedido"),
     "movimentos_avaria": ("filial",),
     "verbas": ("data", "vencimento", "forma", "origem", "descricao", "filtro"),
     "movimentos_verba": ("natureza", "credito", "rotina", "data", "filtro"),
+}
+# Seções opcionais: só são usadas quando aparecem no config (obrigatórias, opcionais).
+SECOES_OPCIONAIS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    # quanto de cada verba já foi aplicado (saldo no critério da rotina 1809)
+    "aplicacoes_verba": (("tabela", "numero_verba", "valor"), ("filtro",)),
 }
 # Campos que aceitam expressão em vez de só nome de coluna.
 CAMPOS_EXPRESSAO = {"quantidade", "valor"}
@@ -148,14 +153,16 @@ def carregar(caminho: str | os.PathLike | None = None) -> Config:
         raise ErroConfiguracao("geral.filial deve ser um código simples")
 
     limpas: dict[str, dict[str, str]] = {}
-    for nome, obrig in OBRIGATORIAS.items():
+    secoes = [(nome, obrig, OPCIONAIS.get(nome, ())) for nome, obrig in OBRIGATORIAS.items()]
+    secoes += [(nome, obrig, opc) for nome, (obrig, opc) in SECOES_OPCIONAIS.items() if nome in tabelas]
+    for nome, obrig, opcionais in secoes:
         t = tabelas.get(nome)
         if t is None:
             raise ErroConfiguracao(f"faltou a seção [tabelas.{nome}]")
         for campo in obrig:
             if not t.get(campo):
                 raise ErroConfiguracao(f"[tabelas.{nome}] precisa de '{campo}'")
-        permitidos = set(obrig) | set(OPCIONAIS.get(nome, ()))
+        permitidos = set(obrig) | set(opcionais)
         desconhecidos = set(t) - permitidos
         if desconhecidos:
             raise ErroConfiguracao(f"[tabelas.{nome}] campos desconhecidos: {sorted(desconhecidos)}")

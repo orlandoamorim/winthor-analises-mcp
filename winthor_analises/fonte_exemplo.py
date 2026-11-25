@@ -156,9 +156,13 @@ class FonteExemplo:
             r = _ruido("estoque", cod)
             # ~20% dos itens com estoque muito baixo, para aparecer risco de ruptura
             dias_cobertura = r * 3 if r < 0.2 else 5 + r * 45
+            # ~30% dos itens com um pedido de compra ainda não recebido
+            rp = _ruido("pedido", cod)
+            pedido = float(round(max(base, 2) * (5 + rp * 20))) if rp < 0.3 else 0.0
             res[cod] = {"produto": cod, "descricao": desc, "fornecedor": forn,
                         "nome_fornecedor": FORNECEDORES[forn],
-                        "quantidade": float(round(max(base, 2) * dias_cobertura))}
+                        "quantidade": float(round(max(base, 2) * dias_cobertura)),
+                        "pedido": pedido if self.cfg and self.cfg.col("estoque", "pedido") else None}
         return res
 
     def verbas(self, fornecedor=None) -> list[dict]:
